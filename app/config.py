@@ -33,6 +33,14 @@ class Settings:
     @property
     def li_version(self): return os.getenv("LINKEDIN_API_VERSION", "202510")
     @property
+    def li_client_id(self): return os.getenv("LINKEDIN_CLIENT_ID", "")
+    @property
+    def li_client_secret(self): return os.getenv("LINKEDIN_CLIENT_SECRET", "")
+    @property
+    def li_redirect(self): return os.getenv("LINKEDIN_REDIRECT_URI", "http://localhost:8000/auth/linkedin/callback")
+    @property
+    def enc_key(self): return os.getenv("TOKEN_ENC_KEY", "")
+    @property
     def db_path(self): return os.getenv("DB_PATH", "data/scheduler.db")
     @property
     def tone_path(self): return os.getenv("TONE_PATH", "data/tone.txt")

@@ -1,14 +1,15 @@
 import hmac
 import logging
+from urllib.parse import quote
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import Depends, FastAPI, Header, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
-from . import drafting, service
+from . import drafting, oauth_linkedin, service, tokens
 from .config import settings
 from .db import init_db
 
@@ -119,3 +120,40 @@ def unschedule(pid: int):
 def remove(pid: int):
     _guard(service.delete_post, pid)
     return {"ok": True}
+
+
+# ---- LinkedIn connection ----
+@app.get("/api/linkedin/status", dependencies=[Depends(auth)])
+def li_status():
+    try:
+        return tokens.status("linkedin")
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@app.post("/api/linkedin/connect", dependencies=[Depends(auth)])
+def li_connect():
+    """Returns the LinkedIn consent URL; the dashboard navigates the browser to it."""
+    try:
+        tokens._fernet()  # fail early if the encryption key is missing
+        return {"url": oauth_linkedin.build_login_url()}
+    except (oauth_linkedin.OAuthError, tokens.TokenError) as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/linkedin/disconnect", dependencies=[Depends(auth)])
+def li_disconnect():
+    tokens.delete("linkedin")
+    return {"ok": True}
+
+
+@app.get("/auth/linkedin/callback")
+def li_callback(code: str = "", state: str = "", error: str = "", error_description: str = ""):
+    """Browser lands here from LinkedIn. Protected by the single-use `state` created in /connect."""
+    if error:
+        return RedirectResponse(f"/?li=error&msg={quote(error_description or error)}")
+    try:
+        oauth_linkedin.handle_callback(code, state)
+    except (oauth_linkedin.OAuthError, tokens.TokenError) as e:
+        return RedirectResponse(f"/?li=error&msg={quote(str(e))}")
+    return RedirectResponse("/?li=ok")

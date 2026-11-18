@@ -1,5 +1,6 @@
 import httpx
 
+from .. import oauth_linkedin, tokens
 from ..config import settings
 from .base import PublishError, Publisher
 
@@ -10,12 +11,14 @@ class LinkedInPublisher(Publisher):
     """Text posts to a personal profile. Image/video upload comes in a later phase."""
 
     def publish(self, post: dict) -> str:
-        if not settings.li_token or not settings.li_person:
-            raise PublishError("LINKEDIN_ACCESS_TOKEN / LINKEDIN_PERSON_ID not set", retryable=False)
+        try:
+            token, person = oauth_linkedin.get_credentials()
+        except (oauth_linkedin.OAuthError, tokens.TokenError) as e:
+            raise PublishError(str(e), retryable=False)
         if post["media_type"] != "none":
             raise PublishError("LinkedIn media posts not implemented yet", retryable=False)
         body = {
-            "author": f"urn:li:person:{settings.li_person}",
+            "author": f"urn:li:person:{person}",
             "commentary": post["content"],
             "visibility": "PUBLIC",
             "distribution": {"feedDistribution": "MAIN_FEED", "targetEntities": [], "thirdPartyDistributionChannels": []},
@@ -23,7 +26,7 @@ class LinkedInPublisher(Publisher):
             "isReshareDisabledByAuthor": False,
         }
         headers = {
-            "Authorization": f"Bearer {settings.li_token}",
+            "Authorization": f"Bearer {token}",
             "LinkedIn-Version": settings.li_version,
             "X-Restli-Protocol-Version": "2.0.0",
             "Content-Type": "application/json",

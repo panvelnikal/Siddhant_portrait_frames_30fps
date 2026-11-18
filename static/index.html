@@ -15,6 +15,8 @@ button.p{background:var(--acc);border-color:var(--acc);color:#fff}button:disable
 .mut{color:var(--mut);font-size:13px}#banner{display:none;background:var(--warn);color:#000;padding:6px 12px;border-radius:8px;margin-bottom:10px;font-size:13px}
 </style></head><body><main>
 <h1>Social Scheduler</h1><div id="banner"></div>
+<div class="card" id="li"><b>LinkedIn</b> <span id="listatus" class="mut">checking...</span>
+<div class="row"><button id="licon">Connect</button><button id="lidis" style="display:none">Disconnect</button></div></div>
 <div class="card"><label class="mut">Rough idea or notes</label>
 <textarea id="idea" placeholder="e.g. Finished my first hackathon project: a campus bus tracker. Learned about websockets..."></textarea>
 <div class="row"><button class="p" id="go">Draft posts</button><span class="mut" id="msg"></span></div></div>
@@ -62,6 +64,14 @@ $('#lists').onclick=async e=>{
     if(a==='sched')await api(`posts/${id}/schedule`,{method:'POST',body:JSON.stringify({scheduled_at:new Date(when).toISOString()})});
     if(a==='unsched')await api(`posts/${id}/unschedule`,{method:'POST'});
     await load()}catch(err){alert(err.message)}};
+async function liLoad(){
+  const s=await api('linkedin/status');
+  $('#listatus').textContent=!s.connected?'Not connected':s.expired?`Token expired. Reconnect.`:`Connected as ${s.name||'you'}${s.days_left!=null?` (token expires in ${s.days_left} days)`:''}`;
+  $('#licon').textContent=s.connected?'Reconnect':'Connect';$('#lidis').style.display=s.connected?'':'none'}
+$('#licon').onclick=async()=>{try{location.href=(await api('linkedin/connect',{method:'POST'})).url}catch(e){alert(e.message)}};
+$('#lidis').onclick=async()=>{if(confirm('Disconnect LinkedIn?')){await api('linkedin/disconnect',{method:'POST'});liLoad()}};
+const q=new URLSearchParams(location.search);if(q.get('li')){alert(q.get('li')==='ok'?'LinkedIn connected.':'LinkedIn connection failed: '+q.get('msg'));history.replaceState({},'','/')}
+liLoad().catch(()=>{});
 api('config').then(c=>{if(c.publish_mode!=='live'){const b=$('#banner');b.style.display='block';b.textContent='MOCK mode: posts are logged, not published.'}}).catch(()=>{});
 load().catch(e=>$('#msg').textContent=e.message);setInterval(()=>{if(!document.activeElement.matches('textarea,input'))load().catch(()=>{})},15000);
 </script></body></html>

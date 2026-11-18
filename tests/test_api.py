@@ -36,3 +36,16 @@ def test_parse_claude_json():
     from app.drafting import _parse
     out = _parse('Sure!\n{"linkedin":"Hi","instagram":"Yo","hashtags":["#a","b"]}')
     assert out["instagram"].endswith("#a #b") and out["linkedin"] == "Hi"
+
+
+def test_linkedin_connect_endpoint_and_bad_callback(client, monkeypatch):
+    from cryptography.fernet import Fernet
+    monkeypatch.setenv("TOKEN_ENC_KEY", Fernet.generate_key().decode())
+    monkeypatch.setenv("LINKEDIN_CLIENT_ID", "cid")
+    monkeypatch.setenv("LINKEDIN_CLIENT_SECRET", "sec")
+    assert client.post("/api/linkedin/connect").status_code == 401
+    r = client.post("/api/linkedin/connect", headers=H)
+    assert r.status_code == 200 and r.json()["url"].startswith("https://www.linkedin.com/oauth/v2/authorization")
+    cb = client.get("/auth/linkedin/callback?code=x&state=forged", follow_redirects=False)
+    assert cb.status_code in (302, 307) and "li=error" in cb.headers["location"]
+    assert client.get("/api/linkedin/status", headers=H).json() == {"connected": False}

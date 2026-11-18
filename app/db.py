@@ -21,6 +21,18 @@ CREATE TABLE IF NOT EXISTS posts (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS oauth_states (
+  state TEXT PRIMARY KEY, provider TEXT NOT NULL, expires_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS oauth_tokens (
+  provider TEXT PRIMARY KEY,
+  access_token TEXT NOT NULL,      -- encrypted
+  refresh_token TEXT,              -- encrypted
+  expires_at TEXT,
+  account_id TEXT,
+  account_name TEXT,
+  updated_at TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_posts_due ON posts(status, scheduled_at);
 """
 
