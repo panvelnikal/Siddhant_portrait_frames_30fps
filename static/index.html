@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Social Scheduler</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--fg:#1a1d21;--mut:#6b7280;--bd:#e3e6ea;--acc:#2563eb;--ok:#15803d;--bad:#b91c1c;--warn:#b45309}
+@media(prefers-color-scheme:dark){:root{--bg:#111418;--card:#1b1f25;--fg:#e8eaed;--mut:#9aa3ae;--bd:#2b313a;--acc:#6ea0ff;--ok:#4ade80;--bad:#f87171;--warn:#fbbf24}}
+*{box-sizing:border-box}body{margin:0;font:15px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--fg)}
+main{max-width:860px;margin:0 auto;padding:16px}h1{font-size:20px;margin:8px 0}h2{font-size:15px;margin:20px 0 8px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:12px;margin-bottom:10px}
+textarea,input{width:100%;font:inherit;color:inherit;background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:8px}
+textarea{min-height:110px;resize:vertical}button{font:inherit;border:1px solid var(--bd);background:var(--card);color:var(--fg);border-radius:8px;padding:6px 12px;cursor:pointer}
+button.p{background:var(--acc);border-color:var(--acc);color:#fff}button:disabled{opacity:.5}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}.badge{font-size:12px;padding:2px 8px;border-radius:99px;border:1px solid var(--bd)}
+.published{color:var(--ok)}.failed{color:var(--bad)}.scheduled{color:var(--acc)}.publishing{color:var(--warn)}.err{color:var(--bad);font-size:13px}
+.mut{color:var(--mut);font-size:13px}#banner{display:none;background:var(--warn);color:#000;padding:6px 12px;border-radius:8px;margin-bottom:10px;font-size:13px}
+</style></head><body><main>
+<h1>Social Scheduler</h1><div id="banner"></div>
+<div class="card"><label class="mut">Rough idea or notes</label>
+<textarea id="idea" placeholder="e.g. Finished my first hackathon project: a campus bus tracker. Learned about websockets..."></textarea>
+<div class="row"><button class="p" id="go">Draft posts</button><span class="mut" id="msg"></span></div></div>
+<div id="lists"></div>
+</main><script>
+const $=s=>document.querySelector(s);
+let token=localStorage.getItem('tok')||'';
+async function api(path,opt={}){
+  if(!token){token=prompt('Dashboard token:')||'';localStorage.setItem('tok',token)}
+  const r=await fetch('/api/'+path,{...opt,headers:{'Content-Type':'application/json',Authorization:'Bearer '+token}});
+  if(r.status===401){localStorage.removeItem('tok');token='';throw new Error('Wrong token, reload and retry')}
+  if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||r.statusText);
+  return r.json();
+}
+const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function localInput(iso){const d=iso?new Date(iso):new Date(Date.now()+3600e3);d.setMinutes(d.getMinutes()-d.getTimezoneOffset());return d.toISOString().slice(0,16)}
+function card(p){
+  const edit=!['publishing','published'].includes(p.status);
+  return `<div class="card" data-id="${p.id}"><div class="row" style="margin:0"><b>${p.platform}</b>
+  <span class="badge ${p.status}">${p.status}</span>${p.scheduled_at?`<span class="mut">${new Date(p.scheduled_at).toLocaleString()}</span>`:''}
+  ${p.external_id?`<span class="mut">id: ${esc(p.external_id)}</span>`:''}</div>
+  <textarea ${edit?'':'disabled'}>${esc(p.content)}</textarea>
+  ${p.error?`<div class="err">${esc(p.error)}</div>`:''}
+  ${edit?`<div class="row"><input type="datetime-local" value="${localInput(p.scheduled_at)}" style="width:auto">
+  <button class="p" data-a="sched">${p.status==='scheduled'?'Reschedule':'Approve & schedule'}</button>
+  <button data-a="save">Save</button>${p.status==='scheduled'?'<button data-a="unsched">Unschedule</button>':''}
+  <button data-a="del">Delete</button></div>`:''}</div>`;
+}
+async function load(){
+  const posts=await api('posts');
+  const g=s=>posts.filter(p=>s.includes(p.status));
+  const sec=(t,l)=>l.length?`<h2>${t}</h2>`+l.map(card).join(''):'';
+  $('#lists').innerHTML=sec('Drafts',g(['draft']))+sec('Scheduled',g(['scheduled','publishing']))+sec('Failed',g(['failed']))+sec('Published',g(['published']).reverse());
+}
+$('#go').onclick=async()=>{
+  const b=$('#go');b.disabled=true;$('#msg').textContent='Drafting...';
+  try{await api('draft',{method:'POST',body:JSON.stringify({idea:$('#idea').value})});$('#msg').textContent='';await load()}
+  catch(e){$('#msg').textContent=e.message}b.disabled=false};
+$('#lists').onclick=async e=>{
+  const a=e.target.dataset.a;if(!a)return;const c=e.target.closest('.card'),id=c.dataset.id;
+  const content=c.querySelector('textarea').value,when=c.querySelector('input')?.value;
+  try{
+    if(a==='del'){if(!confirm('Delete this post?'))return;await api('posts/'+id,{method:'DELETE'})}
+    if(a==='save'||a==='sched')await api('posts/'+id,{method:'PATCH',body:JSON.stringify({content})});
+    if(a==='sched')await api(`posts/${id}/schedule`,{method:'POST',body:JSON.stringify({scheduled_at:new Date(when).toISOString()})});
+    if(a==='unsched')await api(`posts/${id}/unschedule`,{method:'POST'});
+    await load()}catch(err){alert(err.message)}};
+api('config').then(c=>{if(c.publish_mode!=='live'){const b=$('#banner');b.style.display='block';b.textContent='MOCK mode: posts are logged, not published.'}}).catch(()=>{});
+load().catch(e=>$('#msg').textContent=e.message);setInterval(()=>{if(!document.activeElement.matches('textarea,input'))load().catch(()=>{})},15000);
+</script></body></html>
